@@ -1,0 +1,34 @@
+[PASS] mask fraction rect @ 0.10  (achieved 0.102)
+[PASS] mask fraction rect @ 0.25  (achieved 0.250)
+[PASS] mask fraction rect @ 0.50  (achieved 0.502)
+[PASS] mask fraction rect @ 0.70  (achieved 0.687)
+[PASS] mask fraction random @ 0.10  (achieved 0.099)
+[PASS] mask fraction random @ 0.25  (achieved 0.250)
+[PASS] mask fraction random @ 0.50  (achieved 0.500)
+[PASS] mask fraction random @ 0.70  (achieved 0.700)
+[PASS] mask fraction blocks @ 0.10  (achieved 0.082)
+[PASS] mask fraction blocks @ 0.25  (achieved 0.250)
+[PASS] mask fraction blocks @ 0.50  (achieved 0.510)
+[PASS] mask fraction blocks @ 0.70  (achieved 0.735)
+[PASS] perfect prediction gives MSE 0 and SSIM 1
+[PASS] noisy prediction scores worse than perfect
+[PASS] baselines leave visible pixels unchanged
+[PASS] Telea beats visible-pixel mean on 10% random holes  (0.0233 < 0.1099)
+[PASS] model output keeps visible pixels exactly
+[PASS] model output independent of hole contents (no leakage)
+[PASS] overfits a single batch  (hole MSE 0.1831 -> 0.0045)
+[ok] rect: model hole-MSE increases with corruption: 0.0237, 0.0252, 0.0300, 0.0385
+[ok] rect @ 0.10: model beats visible-pixel mean fill
+[ok] rect @ 0.25: model beats visible-pixel mean fill
+[ok] rect @ 0.50: model beats visible-pixel mean fill
+[ok] rect @ 0.70: model beats visible-pixel mean fill
+[ok] random: model hole-MSE increases with corruption: 0.0102, 0.0105, 0.0114, 0.0139
+[ok] random @ 0.10: model beats visible-pixel mean fill
+[ok] random @ 0.25: model beats visible-pixel mean fill
+[ok] random @ 0.50: model beats visible-pixel mean fill
+[ok] random @ 0.70: model beats visible-pixel mean fill
+[ok] blocks: model hole-MSE increases with corruption: 0.0158, 0.0173, 0.0191, 0.0226
+[ok] blocks @ 0.10: model beats visible-pixel mean fill
+[ok] blocks @ 0.25: model beats visible-pixel mean fill
+[ok] blocks @ 0.50: model beats visible-pixel mean fill
+[ok] blocks @ 0.70: model beats visible-pixel mean fill

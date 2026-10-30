@@ -1,0 +1,456 @@
+<title>Fashion-MNIST Inpainting Demo</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: I use one column. First the image picker, then a row of four panels (original, corrupted, baseline, model), then the controls. */
+:root {
+  --bg: #f3f4f6;
+  --surface: #ffffff;
+  --ink: #14171c;
+  --ink2: #4b5563;
+  --line: #dcdfe5;
+  --accent: #2a78d6;
+  --accent-ink: #ffffff;
+  --hole: #eb6834;
+  --focus: #1a5fb4;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1115; --surface: #181b21; --ink: #e9ebef; --ink2: #a4abb8; --line: #2b3039;
+    --accent: #3987e5; --accent-ink: #0b1220; --hole: #e8703f; --focus: #7db3f5;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1115; --surface: #181b21; --ink: #e9ebef; --ink2: #a4abb8; --line: #2b3039;
+  --accent: #3987e5; --accent-ink: #0b1220; --hole: #e8703f; --focus: #7db3f5;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-block: 24px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+h1 { margin: 0; font-size: clamp(1.5rem, 3.4vw, 2rem); font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { margin: 0 0 10px; font-size: 0.78rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2); }
+.lede { margin: 6px 0 0; max-width: 62ch; color: var(--ink2); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+.picker { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 8px; }
+.thumb { padding: 0; border: 2px solid transparent; border-radius: 6px; background: #000; cursor: pointer; line-height: 0; overflow: hidden; }
+.thumb canvas { width: 100%; aspect-ratio: 1; image-rendering: pixelated; display: block; }
+.thumb[aria-pressed="true"] { border-color: var(--accent); }
+.hint { margin: 10px 0 0; color: var(--ink2); font-size: 0.86rem; }
+.stage { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.panel { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.panel .cap { font-size: 0.82rem; font-weight: 600; }
+.panel .cap span { display: block; font-weight: 400; color: var(--ink2); font-size: 0.78rem; }
+.panel canvas { width: 100%; aspect-ratio: 1; image-rendering: pixelated; background: #000; border: 1px solid var(--line); border-radius: 6px; display: block; }
+#cCorr { cursor: crosshair; touch-action: none; }
+.panel.model canvas { border-color: var(--accent); border-width: 2px; }
+.num { font-family: var(--mono); font-size: 0.82rem; font-variant-numeric: tabular-nums; color: var(--ink); min-height: 1.3em; }
+.num b { font-weight: 500; }
+.banner { min-height: 1.4em; margin: 0; color: var(--ink2); font-size: 0.88rem; }
+.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 18px; }
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+legend { padding: 0; margin-bottom: 8px; font-size: 0.78rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2); }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg label { position: relative; }
+.seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.seg span { display: block; padding: 6px 11px; border: 1px solid var(--line); border-radius: 6px; font-size: 0.88rem; background: var(--surface); }
+.seg input:checked + span { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.seg input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: 2px; }
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.row label { font-size: 0.88rem; min-width: 0; }
+input[type="range"] { accent-color: var(--accent); width: 100%; max-width: 260px; }
+button.btn { font: inherit; font-size: 0.88rem; padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); cursor: pointer; }
+button.btn:hover { border-color: var(--accent); }
+button:focus-visible, .thumb:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.value { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 0.85rem; color: var(--ink2); }
+.notes { color: var(--ink2); font-size: 0.86rem; max-width: 80ch; display: flex; flex-direction: column; gap: 6px; }
+.notes p { margin: 0; }
+@media (max-width: 760px) {
+  .stage { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .picker { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Fashion-MNIST Inpainting</h1>
+    <p class="lede">Hide part of a garment and see what a small autoencoder guesses was there. The model sees only the pixels you leave visible and a map of what is hidden. It runs in this page.</p>
+  </header>
+
+  <section class="card" aria-labelledby="h-pick">
+    <h2 id="h-pick">1. Pick an image</h2>
+    <div class="picker" id="picker"></div>
+    <p class="hint">These 20 images come from the test set, so the models never trained on them.</p>
+  </section>
+
+  <section aria-label="Results" style="display:flex;flex-direction:column;gap:10px">
+    <div class="stage">
+      <div class="panel">
+        <div class="cap">Original<span id="clsName">&nbsp;</span></div>
+        <canvas id="cOrig" width="28" height="28" role="img" aria-label="Original image"></canvas>
+        <div class="num">&nbsp;</div>
+      </div>
+      <div class="panel">
+        <div class="cap">Corrupted<span>Drag here to hide pixels</span></div>
+        <canvas id="cCorr" width="28" height="28" role="img" aria-label="Corrupted image. Drag with a pointer to hide pixels."></canvas>
+        <div class="num" id="nHidden"></div>
+      </div>
+      <div class="panel">
+        <div class="cap">Mean image fill<span>Average training image</span></div>
+        <canvas id="cBase" width="28" height="28" role="img" aria-label="Baseline reconstruction"></canvas>
+        <div class="num" id="nBase"></div>
+      </div>
+      <div class="panel model">
+        <div class="cap">Autoencoder<span id="modelName"></span></div>
+        <canvas id="cModel" width="28" height="28" role="img" aria-label="Autoencoder reconstruction"></canvas>
+        <div class="num" id="nModel"></div>
+      </div>
+    </div>
+    <p class="banner" id="banner" aria-live="polite"></p>
+  </section>
+
+  <section class="card" aria-labelledby="h-ctl">
+    <h2 id="h-ctl">2. Choose what to hide and which model fills it in</h2>
+    <div class="controls">
+      <fieldset>
+        <legend>Shape</legend>
+        <div class="seg" id="segKind">
+          <label><input type="radio" name="kind" value="rect" checked><span>One rectangle</span></label>
+          <label><input type="radio" name="kind" value="random"><span>Random pixels</span></label>
+          <label><input type="radio" name="kind" value="blocks"><span>Four blocks</span></label>
+        </div>
+        <div class="row">
+          <label for="frac">Share hidden</label>
+          <input id="frac" type="range" min="5" max="85" step="1" value="40" aria-describedby="fracVal">
+          <span class="value" id="fracVal">40%</span>
+        </div>
+        <div class="row">
+          <button class="btn" id="btnReroll" type="button">New placement</button>
+          <button class="btn" id="btnClear" type="button">Clear</button>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Draw your own</legend>
+        <div class="seg" id="segTool">
+          <label><input type="radio" name="tool" value="paint" checked><span>Hide</span></label>
+          <label><input type="radio" name="tool" value="erase"><span>Restore</span></label>
+        </div>
+        <div class="row">
+          <label for="brush">Brush</label>
+          <input id="brush" type="range" min="1" max="8" step="1" value="3" aria-describedby="brushVal">
+          <span class="value" id="brushVal">3 px</span>
+        </div>
+        <div class="row">
+          <input id="tint" type="checkbox">
+          <label for="tint">Tint the filled-in pixels</label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Autoencoder trained on</legend>
+        <div class="seg" id="segModel">
+          <label><input type="radio" name="model" value="rect" checked><span>Rectangles</span></label>
+          <label><input type="radio" name="model" value="random"><span>Random pixels</span></label>
+          <label><input type="radio" name="model" value="blocks"><span>Four blocks</span></label>
+        </div>
+        <p class="hint" style="margin:0">Each model trained on one kind of mask only.</p>
+      </fieldset>
+    </div>
+  </section>
+
+  <div class="notes">
+    <p>PSNR is measured on the hidden pixels only, so higher is better. The mean image fill scores about 10 dB, and a model that does no better than that has learned nothing useful for the picture.</p>
+    <p>The models trained on masks that hid 10 to 70% of the pixels, so results outside that range are less reliable. Try a rectangle with the model trained on random pixels. Averaged over the whole test set it scores about the same as the mean image, and on a single image it can be worse. This is the gap I measured when I trained on one mask type and tested on another.</p>
+    <p>Each model has 179 thousand parameters, takes a 28 by 28 image plus the mask, and squeezes it through a 64-number bottleneck before rebuilding the image.</p>
+  </div>
+</div>
+
+<script>
+const DATA = __DATA__;
+
+/*MODEL-START*/
+const N = 28, NN = 784;
+const CLASS_NAMES = ["T-shirt/top", "Trouser", "Pullover", "Dress", "Coat", "Sandal", "Shirt", "Sneaker", "Bag", "Ankle boot"];
+
+function b64ToBytes(s) {
+  const bin = atob(s);
+  const u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return u;
+}
+
+// I store the weights as one long float32 list, in the same order that make_demo.py writes them
+function weightShapes(L) {
+  return [["e0w", 16 * 2 * 9], ["e0b", 16], ["e2w", 32 * 16 * 9], ["e2b", 32], ["e4w", 64 * 32 * 9], ["e4b", 64],
+          ["e7w", L * 1024], ["e7b", L], ["fcw", 1024 * L], ["fcb", 1024],
+          ["d0w", 64 * 32 * 9], ["d0b", 32], ["d2w", 32 * 16 * 9], ["d2b", 16], ["d4w", 16 * 9], ["d4b", 1]];
+}
+function parseWeights(b64, L) {
+  const f = new Float32Array(b64ToBytes(b64).buffer);
+  const W = {};
+  let o = 0;
+  for (const [k, n] of weightShapes(L)) { W[k] = f.subarray(o, o + n); o += n; }
+  if (o !== f.length) throw new Error("weight size mismatch");
+  return W;
+}
+
+// my convolution with a 3x3 kernel. The weights have shape (out, in, 3, 3), the same as PyTorch's Conv2d
+function conv3(inp, inC, H, Wd, w, b, outC, stride, pad) {
+  const Ho = Math.floor((H + 2 * pad - 3) / stride) + 1, Wo = Math.floor((Wd + 2 * pad - 3) / stride) + 1;
+  const out = new Float32Array(outC * Ho * Wo);
+  for (let o = 0; o < outC; o++) for (let y = 0; y < Ho; y++) for (let x = 0; x < Wo; x++) {
+    let s = b[o];
+    for (let i = 0; i < inC; i++) for (let ky = 0; ky < 3; ky++) {
+      const iy = y * stride - pad + ky;
+      if (iy < 0 || iy >= H) continue;
+      for (let kx = 0; kx < 3; kx++) {
+        const ix = x * stride - pad + kx;
+        if (ix < 0 || ix >= Wd) continue;
+        s += inp[(i * H + iy) * Wd + ix] * w[((o * inC + i) * 3 + ky) * 3 + kx];
+      }
+    }
+    out[(o * Ho + y) * Wo + x] = s;
+  }
+  return { data: out, H: Ho, W: Wo };
+}
+
+// my transposed convolution. The weights have shape (in, out, 3, 3), the same as PyTorch's ConvTranspose2d
+function convT3(inp, inC, H, Wd, w, b, outC, stride, pad, outPad) {
+  const Ho = (H - 1) * stride - 2 * pad + 3 + outPad, Wo = (Wd - 1) * stride - 2 * pad + 3 + outPad;
+  const out = new Float32Array(outC * Ho * Wo);
+  for (let o = 0; o < outC; o++) out.fill(b[o], o * Ho * Wo, (o + 1) * Ho * Wo);
+  for (let i = 0; i < inC; i++) for (let iy = 0; iy < H; iy++) for (let ix = 0; ix < Wd; ix++) {
+    const v = inp[(i * H + iy) * Wd + ix];
+    if (v === 0) continue;
+    for (let o = 0; o < outC; o++) for (let ky = 0; ky < 3; ky++) {
+      const oy = iy * stride - pad + ky;
+      if (oy < 0 || oy >= Ho) continue;
+      for (let kx = 0; kx < 3; kx++) {
+        const ox = ix * stride - pad + kx;
+        if (ox < 0 || ox >= Wo) continue;
+        out[(o * Ho + oy) * Wo + ox] += v * w[((i * outC + o) * 3 + ky) * 3 + kx];
+      }
+    }
+  }
+  return { data: out, H: Ho, W: Wo };
+}
+
+function linear(x, w, b, outN, inN) {
+  const out = new Float32Array(outN);
+  for (let j = 0; j < outN; j++) {
+    let s = b[j];
+    const base = j * inN;
+    for (let k = 0; k < inN; k++) s += w[base + k] * x[k];
+    out[j] = s;
+  }
+  return out;
+}
+function relu(a) { for (let i = 0; i < a.length; i++) if (a[i] < 0) a[i] = 0; return a; }
+
+// This is the same forward pass as in models.py. img has 784 values between 0 and 1, and mask has 784 values where 1 means hidden.
+// I return the raw network output, and the prediction with the visible pixels pasted back in.
+function forward(W, L, img, mask) {
+  const x = new Float32Array(2 * NN);
+  for (let k = 0; k < NN; k++) { x[k] = img[k] * (1 - mask[k]); x[NN + k] = mask[k]; }
+  let a = conv3(x, 2, 28, 28, W.e0w, W.e0b, 16, 2, 1); relu(a.data);
+  a = conv3(a.data, 16, a.H, a.W, W.e2w, W.e2b, 32, 2, 1); relu(a.data);
+  a = conv3(a.data, 32, a.H, a.W, W.e4w, W.e4b, 64, 2, 1); relu(a.data);
+  const z = linear(a.data, W.e7w, W.e7b, L, 1024);
+  const h = relu(linear(z, W.fcw, W.fcb, 1024, L));
+  let d = convT3(h, 64, 4, 4, W.d0w, W.d0b, 32, 2, 1, 0); relu(d.data);
+  d = convT3(d.data, 32, 7, 7, W.d2w, W.d2b, 16, 2, 1, 1); relu(d.data);
+  d = convT3(d.data, 16, 14, 14, W.d4w, W.d4b, 1, 2, 1, 1);
+  const raw = new Float32Array(NN), pred = new Float32Array(NN);
+  for (let k = 0; k < NN; k++) {
+    raw[k] = 1 / (1 + Math.exp(-d.data[k]));
+    pred[k] = mask[k] ? raw[k] : img[k];
+  }
+  return { raw, pred };
+}
+
+// I use a small seeded random generator, so a mask keeps its placement while I move the slider
+function makeRng(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+// these are the same three mask types as in masks.py
+function makeMask(kind, frac, seed) {
+  const r = makeRng(seed), m = new Uint8Array(NN);
+  if (kind === "rect") {
+    const area = frac * NN, aspect = Math.exp(Math.log(0.5) + r() * (Math.log(2) - Math.log(0.5)));
+    const h = clamp(Math.round(Math.sqrt(area * aspect)), 1, N), w = clamp(Math.round(area / h), 1, N);
+    const top = Math.floor(r() * (N - h + 1)), left = Math.floor(r() * (N - w + 1));
+    for (let y = top; y < top + h; y++) for (let x = left; x < left + w; x++) m[y * N + x] = 1;
+  } else if (kind === "random") {
+    const idx = Array.from({ length: NN }, (_, i) => i);
+    for (let i = NN - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [idx[i], idx[j]] = [idx[j], idx[i]]; }
+    const n = Math.round(frac * NN);
+    for (let i = 0; i < n; i++) m[idx[i]] = 1;
+  } else {
+    const half = N / 2, side = clamp(Math.round(Math.sqrt(frac * NN / 4)), 1, half);
+    for (const qr of [0, half]) for (const qc of [0, half]) {
+      const top = qr + Math.floor(r() * (half - side + 1)), left = qc + Math.floor(r() * (half - side + 1));
+      for (let y = top; y < top + side; y++) for (let x = left; x < left + side; x++) m[y * N + x] = 1;
+    }
+  }
+  return m;
+}
+
+function holeStats(pred, img, mask) {
+  let s = 0, n = 0;
+  for (let k = 0; k < NN; k++) if (mask[k]) { const d = pred[k] - img[k]; s += d * d; n++; }
+  if (!n) return null;
+  const mse = s / n;
+  return { n, mse, psnr: 10 * Math.log10(1 / Math.max(mse, 1e-10)) };
+}
+/*MODEL-END*/
+
+const samples = DATA.samples.map(s => ({ cls: s.cls, f: Float32Array.from(b64ToBytes(s.px), v => v / 255) }));
+const meanImage = new Float32Array(b64ToBytes(DATA.meanImage).buffer);
+const L = DATA.latent;
+const models = {};
+for (const k of Object.keys(DATA.weights)) models[k] = parseWeights(DATA.weights[k], L);
+const MODEL_LABEL = { rect: "Trained on rectangles", random: "Trained on random pixels", blocks: "Trained on four blocks" };
+
+const $ = id => document.getElementById(id);
+const state = { idx: 0, mask: new Uint8Array(NN), kind: "rect", frac: 0.4, seed: 7, model: "rect", tool: "paint", brush: 3, tint: false };
+
+// I draw a 28x28 image on a canvas, and the hole pixels can be coloured or tinted
+function draw(canvas, img, mask, mode) {
+  const ctx = canvas.getContext("2d");
+  const id = ctx.createImageData(N, N);
+  const hole = getComputedStyle(document.documentElement).getPropertyValue("--hole").trim() || "#eb6834";
+  const hc = [parseInt(hole.slice(1, 3), 16), parseInt(hole.slice(3, 5), 16), parseInt(hole.slice(5, 7), 16)];
+  for (let k = 0; k < NN; k++) {
+    const g = Math.round(clamp(img[k], 0, 1) * 255);
+    let rgb = [g, g, g];
+    if (mask && mask[k]) {
+      if (mode === "solid") rgb = hc;
+      else if (mode === "tint") rgb = rgb.map((v, i) => Math.round(v * 0.82 + hc[i] * 0.18));
+    }
+    id.data[k * 4] = rgb[0]; id.data[k * 4 + 1] = rgb[1]; id.data[k * 4 + 2] = rgb[2]; id.data[k * 4 + 3] = 255;
+  }
+  ctx.putImageData(id, 0, 0);
+}
+
+let queued = false;
+function schedule() { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; render(); }); } }
+
+function render() {
+  const s = samples[state.idx], img = s.f, mask = state.mask;
+  let hidden = 0;
+  for (let k = 0; k < NN; k++) hidden += mask[k];
+  const pct = Math.round(hidden / NN * 100);
+  const base = new Float32Array(NN);
+  for (let k = 0; k < NN; k++) base[k] = mask[k] ? meanImage[k] : img[k];
+  const out = forward(models[state.model], L, img, mask);
+  const mode = state.tint ? "tint" : "none";
+
+  draw($("cOrig"), img, null, "none");
+  draw($("cCorr"), img, mask, "solid");
+  draw($("cBase"), base, mask, mode);
+  draw($("cModel"), out.pred, mask, mode);
+  $("clsName").textContent = CLASS_NAMES[s.cls];
+  $("modelName").textContent = MODEL_LABEL[state.model];
+  $("nHidden").innerHTML = hidden ? "<b>" + pct + "%</b> hidden (" + hidden + " of 784)" : "Nothing hidden yet";
+  const sb = holeStats(base, img, mask), sm = holeStats(out.pred, img, mask);
+  $("nBase").innerHTML = sb ? "PSNR <b>" + sb.psnr.toFixed(1) + " dB</b><br>MSE " + sb.mse.toFixed(4) : "";
+  $("nModel").innerHTML = sm ? "PSNR <b>" + sm.psnr.toFixed(1) + " dB</b><br>MSE " + sm.mse.toFixed(4) : "";
+  let msg = "";
+  if (!hidden) msg = "Drag over the second image, or pick a shape, to hide some pixels.";
+  else if (pct < 10) msg = "Only " + pct + "% is hidden. The models trained on 10 to 70%, so this is an easy case they did not practise on.";
+  else if (pct > 70) msg = pct + "% is hidden. The models trained on 10 to 70%, so expect poor guesses here.";
+  else if (sm && sb) {
+    const d = sm.psnr - sb.psnr;
+    msg = d >= 0 ? "The autoencoder is " + d.toFixed(1) + " dB better than the mean image fill on the hidden pixels."
+                 : "The autoencoder is " + (-d).toFixed(1) + " dB worse than the mean image fill here. This mask is unlike the ones it trained on.";
+  }
+  $("banner").textContent = msg;
+}
+
+function regenerate() { state.mask = makeMask(state.kind, state.frac, state.seed); schedule(); }
+
+// I make the thumbnails for the image picker
+const picker = $("picker");
+samples.forEach((s, i) => {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "thumb"; b.setAttribute("aria-label", CLASS_NAMES[s.cls] + ", image " + (i + 1));
+  b.setAttribute("aria-pressed", i === 0 ? "true" : "false");
+  const c = document.createElement("canvas"); c.width = N; c.height = N;
+  b.appendChild(c); picker.appendChild(b);
+  draw(c, s.f, null, "none");
+  b.addEventListener("click", () => {
+    state.idx = i;
+    picker.querySelectorAll(".thumb").forEach((t, j) => t.setAttribute("aria-pressed", j === i ? "true" : "false"));
+    schedule();
+  });
+});
+
+// I connect the controls to the state
+document.querySelectorAll('input[name="kind"]').forEach(r => r.addEventListener("change", () => { state.kind = r.value; regenerate(); }));
+document.querySelectorAll('input[name="model"]').forEach(r => r.addEventListener("change", () => { state.model = r.value; schedule(); }));
+document.querySelectorAll('input[name="tool"]').forEach(r => r.addEventListener("change", () => { state.tool = r.value; }));
+$("frac").addEventListener("input", e => { state.frac = e.target.value / 100; $("fracVal").textContent = e.target.value + "%"; regenerate(); });
+$("brush").addEventListener("input", e => { state.brush = +e.target.value; $("brushVal").textContent = e.target.value + " px"; });
+$("tint").addEventListener("change", e => { state.tint = e.target.checked; schedule(); });
+$("btnReroll").addEventListener("click", () => { state.seed += 1; regenerate(); });
+$("btnClear").addEventListener("click", () => { state.mask = new Uint8Array(NN); schedule(); });
+
+// I let the viewer paint on the corrupted image
+const cCorr = $("cCorr");
+let drawing = false, last = null;
+function cellAt(e) {
+  const r = cCorr.getBoundingClientRect();
+  return [clamp(Math.floor((e.clientX - r.left) / r.width * N), 0, N - 1), clamp(Math.floor((e.clientY - r.top) / r.height * N), 0, N - 1)];
+}
+function stamp(cx, cy) {
+  const v = state.tool === "paint" ? 1 : 0, rad = state.brush / 2;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const dx = x - cx, dy = y - cy;
+    if (state.brush === 1 ? (x === cx && y === cy) : (dx * dx + dy * dy <= rad * rad)) state.mask[y * N + x] = v;
+  }
+}
+function strokeTo(c) {
+  if (last) {
+    const steps = Math.max(Math.abs(c[0] - last[0]), Math.abs(c[1] - last[1]), 1);
+    for (let s = 1; s <= steps; s++) stamp(Math.round(last[0] + (c[0] - last[0]) * s / steps), Math.round(last[1] + (c[1] - last[1]) * s / steps));
+  } else stamp(c[0], c[1]);
+  last = c;
+  schedule();
+}
+cCorr.addEventListener("pointerdown", e => { drawing = true; last = null; cCorr.setPointerCapture(e.pointerId); strokeTo(cellAt(e)); e.preventDefault(); });
+cCorr.addEventListener("pointermove", e => { if (drawing) strokeTo(cellAt(e)); });
+const stop = () => { drawing = false; last = null; };
+cCorr.addEventListener("pointerup", stop);
+cCorr.addEventListener("pointercancel", stop);
+
+// I repaint when the viewer switches between light and dark, because the hole colour comes from the theme
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", schedule);
+new MutationObserver(schedule).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+regenerate();
+</script>
