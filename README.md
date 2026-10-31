@@ -5,7 +5,7 @@
 more of the image is missing (10 to 70%) and when the missing part has a different shape (one rectangle,
 scattered random pixels, or four blocks). I compare the autoencoder against simple baselines that do not learn.
 
-- Screen recording: **[ADD LINK]**
+- Screen recording: **[https://www.loom.com/share/7dcc8c4e09ac470b972f1083d9768f37]**
 - Try it yourself: open `demo/index.html` in a browser (double click it, nothing to install). Pick an image, draw over it, and see what each trained model guesses.
 - Status: the pipeline, the evaluation, the sanity checks, the seed comparison and the interactive demo all work end to end. I still have to try skip connections and study the size of the bottleneck (see "Next steps").
 
